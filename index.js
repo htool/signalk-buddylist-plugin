@@ -24,7 +24,7 @@ module.exports = function(app) {
 
   plugin.start = function(props) {
     setupSubscriptions(props)
-    
+
     app.get(apiBase, (req, res) => {
       const list = (props.buddies || []).map(buddy => {
         return JSON.parse(JSON.stringify(buddy))
@@ -55,7 +55,7 @@ module.exports = function(app) {
         res.status(400).send('cannot find buddy with urn: ' + urn)
         return
       }
-      
+
       props.buddies = props.buddies.filter(b => b.urn != urn)
       saveConfig(props, res)
 
@@ -106,12 +106,14 @@ module.exports = function(app) {
           policy: 'instant'
         }]
       }
-      
+
       app.subscriptionmanager.subscribe(command, unsubscribes, subscription_error, delta => {
         delta.updates.forEach(update => {
           update.values.forEach(pv => {
             if ( pv.path == 'navigation.position' ) {
-              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, pv.value)
+              if (typeof buddy.name != 'undefined') {
+                checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, pv.value)
+              }
             }
           })
         })
@@ -124,11 +126,11 @@ module.exports = function(app) {
     console.log("error: " + err)
     app.setProviderError(err.message)
   }
-  
+
   function checkBuddy(context, name, alertEnabled, alertDistance, position) {
     const isBuddy = app.getPath(`vessels.${context}.buddy`)
     if ( !isBuddy ) {
-      app.debug('found buddy: %s', context) 
+      app.debug('found buddy: %s', context)
       app.handleMessage(plugin.id, {
         context: `vessels.${context}`,
         updates: [{
@@ -146,8 +148,8 @@ module.exports = function(app) {
       if ( myPos && myPos.latitude && myPos.longitude ) {
         const distance = geolib.getDistance(myPos, position)
         app.debug('%s is %dm away', context, distance)
-        if ( distance < alertDistance*1000 ) {
-          const sentName = name || kname || context
+        if ( distance < alertDistance*1852 ) {
+          const sentName = name
           const sent = notifications[context]
           app.debug('sent: ' + sent)
           if ( !sent || sent != sentName ) {
@@ -194,7 +196,7 @@ module.exports = function(app) {
     unsubscribes.forEach(f => f())
     unsubscribes = []
   }
-  
+
   plugin.id = "signalk-buddylist-plugin"
   plugin.name = "Buddy List"
   plugin.description = "Provides a buddy list for Signal K Node Server"
@@ -212,7 +214,8 @@ module.exports = function(app) {
             urn: {
               type: 'string',
               title: 'URN',
-              description: 'The Signal K urn of the buddy (ex: urn:mrn:imo:mmsi:123456)'
+              description: 'The Signal K urn of the buddy (ex: urn:mrn:imo:mmsi:123456)',
+              default: 'urn:mrn:imo:mmsi:'
             },
             name: {
               type: 'string',
@@ -231,7 +234,7 @@ module.exports = function(app) {
       alertDistance: {
         type: 'number',
         title: 'Alert Distance',
-        description: 'Sent the notification when a buddy is this near (km)',
+        description: 'Sent the notification when a buddy is this near (NM)',
         default: 1
       }
     }
