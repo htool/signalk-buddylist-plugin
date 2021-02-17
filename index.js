@@ -111,6 +111,7 @@ module.exports = function(app) {
         delta.updates.forEach(update => {
           update.values.forEach(pv => {
             if ( pv.path == 'navigation.position' ) {
+              app.debug('buddy.name: ' + buddy.name)
               if (typeof buddy.name != 'undefined') {
                 checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, pv.value)
               }
@@ -162,7 +163,7 @@ module.exports = function(app) {
                   value: {
                     state: 'alert',
                     method: [ 'visual', 'sound' ],
-                    message: `Your buddy ${sentName} is near`
+                    message: `Your buddy ${sentName} is near (` + distance + 'm)'
                   }
                 }]
               }]
