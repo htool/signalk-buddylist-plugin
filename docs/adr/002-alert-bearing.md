@@ -1,6 +1,6 @@
 # ADR 002: Relative bearing in the alert
 
-Status: accepted (implement in features.md slice 3)
+Status: implemented
 
 ## Context
 

@@ -18,5 +18,4 @@ Read these, then `index.js`. Do not load `signalk-server` source unless a client
 - Keep v1 and v2 HTTP APIs working. v2 is the client-facing resources API.
 - Plugins write Signal K deltas (`app.handleMessage`). Do not emit NMEA.
 - `geolib.getDistance` returns metres. Convert configured range in one place only.
-- Slice 2 (alert NM, message text, URN default, name-missing) is implemented.
-- Next commit is features.md slice 3 (optional relative bearing). No other features in that commit.
+- Slice 3 (optional relative bearing) is implemented. Do not add resend-on-distance in this PR.

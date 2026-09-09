@@ -23,6 +23,7 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
 
 ## 3. Optional relative bearing in the alert
 
+- **Status:** done
 - **Outcome:** Optional bearing vs heading in the notification, per ADR 002.
 - **ADR:** [002](adr/002-alert-bearing.md)
 - **Done when:**

@@ -17,7 +17,7 @@ Read [AGENTS.md](../../AGENTS.md) first. Next slice is [docs/features.md](../../
 - Display name: `buddy.name || AIS name || urn`. If `buddy.name` is missing, append ` (name missing)` to the message. Still subscribe and still alert.
 - Keep v1 and v2 routes. Fix v1 with `.find`, do not copy v2 JSON onto v1.
 - Recode onto current `index.js`. Do not cherry-pick `fork-work-2021` (`checkBuddy` gained `resendAlerts`).
-- Slice 3: `alertBearing`. Relative ° from geolib bearing minus headingTrue (else headingMagnetic). No pad, no COG. Omit bearing if no heading.
+- Slice 3 (`alertBearing`) is on this branch. Next PR is resend-on-distance, not this one.
 
 ## Do not
 
