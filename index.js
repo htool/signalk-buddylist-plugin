@@ -14,6 +14,7 @@
  */
 
 const geolib = require('geolib')
+const alerts = require('./lib/alerts')
 
 const apiBase = '/signalk/v1/api/resources/buddies'
 const v2ApiBase = '/signalk/v2/api/resources/buddies'
@@ -210,7 +211,7 @@ module.exports = function(app) {
         delta.updates.forEach(update => {
           update.values.forEach(pv => {
             if ( pv.path == 'navigation.position' ) {
-              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, pv.value)
+              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, props.resendAlertDistance, pv.value)
             }
           })
         })
@@ -224,7 +225,7 @@ module.exports = function(app) {
     app.setProviderError(err.message)
   }
   
-  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, position) {
+  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, resendAlertDistance, position) {
     const isBuddy = app.getPath(`vessels.${context}.buddy`)
     if ( !isBuddy ) {
       app.debug('found buddy: %s', context) 
@@ -256,10 +257,16 @@ module.exports = function(app) {
             method = existing.value.method
           }
           
-          app.debug('sent: ' + sent)
-          if ( !sent || resendAlerts || sent != sentName ) {
+          app.debug('sent: %j', sent)
+          if ( alerts.shouldSendAlert({
+            sent,
+            sentName,
+            distance,
+            resendAlerts,
+            resendAlertDistance
+          }) ) {
             app.debug('send notification for %s', context)
-            notifications[context] = sentName
+            notifications[context] = { name: sentName, distance }
             app.handleMessage(plugin.id, {
               updates: [{
                 values: [{
@@ -342,8 +349,14 @@ module.exports = function(app) {
       resendAlerts: {
         type: 'boolean',
         title: 'Resend Alerts',
-        description: 'Continually send notifications when a buddy is near',
+        description: 'Send again while a buddy stays near. If Resend when distance changes is 0, every position; otherwise only after that many metres.',
         default: false
+      },
+      resendAlertDistance: {
+        type: 'number',
+        title: 'Resend when distance changes (m)',
+        description: 'Only used when Resend Alerts is on. 0 = every position; otherwise resend after this many metres.',
+        default: 0
       },
       alertDistance: {
         type: 'number',
