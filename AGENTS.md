@@ -7,6 +7,7 @@ Read these, then `index.js`. Do not load `signalk-server` source unless a client
 | [README.md](README.md) | Scope: job, Signal K paths, HTTP APIs |
 | [docs/architecture.md](docs/architecture.md) | Config → subscribe → `buddy` flag → notification |
 | [docs/adr/001-alert-units-and-names.md](docs/adr/001-alert-units-and-names.md) | Locked: NM, metres in text, `(name missing)` |
+| [docs/adr/002-alert-bearing.md](docs/adr/002-alert-bearing.md) | Locked: optional relative bearing in the alert |
 | [docs/features.md](docs/features.md) | Ordered slices. Implement the next undone slice only |
 | [docs/known-gaps.md](docs/known-gaps.md) | Known bugs and out of scope |
 | [skills/buddies/SKILL.md](skills/buddies/SKILL.md) | How to change alerts and the buddy APIs |
@@ -17,4 +18,4 @@ Read these, then `index.js`. Do not load `signalk-server` source unless a client
 - Keep v1 and v2 HTTP APIs working. v2 is the client-facing resources API.
 - Plugins write Signal K deltas (`app.handleMessage`). Do not emit NMEA.
 - `geolib.getDistance` returns metres. Convert configured range in one place only.
-- Slice 2 (alert NM, message text, URN default, name-missing) is implemented. Do not expand this PR.
+- Slice 3 (optional relative bearing) is implemented. Do not add resend-on-distance in this PR.

@@ -7,7 +7,7 @@ Maintain a configured list of other vessels (buddies). When a buddy's `navigatio
 ## Data flow
 
 ```
-plugin config (urn, optional name, alert, alertDistance, resendAlerts)
+plugin config (urn, optional name, alert, alertDistance, resendAlerts, alertBearing)
         │
         ▼
 subscribe vessels.<urn>.navigation.position  (policy: instant)
@@ -18,6 +18,7 @@ subscribe vessels.<urn>.navigation.position  (policy: instant)
               distance_m = geolib.getDistance(self, buddy)
               if distance_m < threshold:
                 notifications.buddy.<urn>  state=alert
+                optional: relative bearing vs headingTrue else headingMagnetic
               else if we had alerted:
                 state=normal  (cleared)
 ```
@@ -31,6 +32,7 @@ HTTP mutations (add / rename / delete) call `app.savePluginOptions`, then tear d
 | `vessels.<urn>.buddy` | boolean on the buddy context (empty path, value `{ buddy: true/false }`) |
 | `notifications.buddy.<urn>` | alert / normal on self |
 | config `alertDistance` | number, nautical miles; threshold is `alertDistance * 1852` metres |
+| config `alertBearing` | if true, alert may include relative ° (`headingTrue` else magnetic) |
 
 ## HTTP
 

@@ -17,12 +17,13 @@ Read [AGENTS.md](../../AGENTS.md) first. Next slice is [docs/features.md](../../
 - Display name: `buddy.name || AIS name || urn`. If `buddy.name` is missing, append ` (name missing)` to the message. Still subscribe and still alert.
 - Keep v1 and v2 routes. Fix v1 with `.find`, do not copy v2 JSON onto v1.
 - Recode onto current `index.js`. Do not cherry-pick `fork-work-2021` (`checkBuddy` gained `resendAlerts`).
-- Slice 2 is already on this branch. Do not add heading, tests, or APIs in the same PR.
+- Slice 3 (`alertBearing`) is on this branch. Next PR is resend-on-distance, not this one.
 
 ## Do not
 
 - Skip buddies that have no configured name.
-- Add heading to the notification.
+- Pad relative bearing with leading zeros.
+- Use COG as heading.
 - Bump the npm version.
 - Emit NMEA or touch signalk-server internals.
-- Expand this PR past features.md slice 2.
+- Expand this PR past features.md slice 3.

@@ -210,7 +210,7 @@ module.exports = function(app) {
         delta.updates.forEach(update => {
           update.values.forEach(pv => {
             if ( pv.path == 'navigation.position' ) {
-              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, pv.value)
+              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, props.alertBearing, pv.value)
             }
           })
         })
@@ -224,7 +224,30 @@ module.exports = function(app) {
     app.setProviderError(err.message)
   }
   
-  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, position) {
+  function headingDegrees () {
+    const trueH = app.getSelfPath('navigation.headingTrue.value')
+    const magH = app.getSelfPath('navigation.headingMagnetic.value')
+    const rad = Number.isFinite(trueH) ? trueH : magH
+    if ( !Number.isFinite(rad) ) {
+      return null
+    }
+    return rad * 180 / Math.PI
+  }
+
+  function relativeBearingDeg (myPos, position) {
+    const headingDeg = headingDegrees()
+    if ( headingDeg === null ) {
+      return null
+    }
+    const bearing = geolib.getGreatCircleBearing(myPos, position)
+    let rel = (bearing - headingDeg) % 360
+    if ( rel < 0 ) {
+      rel += 360
+    }
+    return Math.round(rel) % 360
+  }
+
+  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, alertBearing, position) {
     const isBuddy = app.getPath(`vessels.${context}.buddy`)
     if ( !isBuddy ) {
       app.debug('found buddy: %s', context) 
@@ -248,6 +271,13 @@ module.exports = function(app) {
         const nameMissing = typeof name !== 'string' || name.trim() === ''
         const sentName = name || kname || context
         const nameNote = nameMissing ? ' (name missing)' : ''
+        let nearDetail = `(${distance}m)`
+        if ( alertBearing ) {
+          const rel = relativeBearingDeg(myPos, position)
+          if ( rel !== null ) {
+            nearDetail = `(${distance}m, ${rel}°)`
+          }
+        }
         if ( distance < alertDistance * 1852 ) {
           const sent = notifications[context]
           const path = `notifications.buddy.${context}`
@@ -269,7 +299,7 @@ module.exports = function(app) {
                   value: {
                     state: 'alert',
                     method,
-                    message: `Your buddy ${sentName}${nameNote} is near (${distance}m)`
+                    message: `Your buddy ${sentName}${nameNote} is near ${nearDetail}`
                   }
                 }]
               }]
@@ -346,6 +376,12 @@ module.exports = function(app) {
         type: 'boolean',
         title: 'Resend Alerts',
         description: 'Continually send notifications when a buddy is near',
+        default: false
+      },
+      alertBearing: {
+        type: 'boolean',
+        title: 'Show bearing',
+        description: 'Include buddy bearing relative to heading in the notification (0° ahead)',
         default: false
       },
       alertDistance: {
