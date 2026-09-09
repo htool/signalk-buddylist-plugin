@@ -14,6 +14,7 @@
  */
 
 const geolib = require('geolib')
+const alerts = require('./lib/alerts')
 
 const apiBase = '/signalk/v1/api/resources/buddies'
 const v2ApiBase = '/signalk/v2/api/resources/buddies'
@@ -210,7 +211,7 @@ module.exports = function(app) {
         delta.updates.forEach(update => {
           update.values.forEach(pv => {
             if ( pv.path == 'navigation.position' ) {
-              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, pv.value)
+              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, props.alertBearing, pv.value)
             }
           })
         })
@@ -224,7 +225,22 @@ module.exports = function(app) {
     app.setProviderError(err.message)
   }
   
-  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, position) {
+  function headingDegrees () {
+    return alerts.headingDegrees(
+      app.getSelfPath('navigation.headingTrue.value'),
+      app.getSelfPath('navigation.headingMagnetic.value')
+    )
+  }
+
+  function relativeBearingDeg (myPos, position) {
+    const headingDeg = headingDegrees()
+    if ( headingDeg === null ) {
+      return null
+    }
+    return alerts.relativeBearingDeg(headingDeg, geolib.getGreatCircleBearing(myPos, position))
+  }
+
+  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, alertBearing, position) {
     const isBuddy = app.getPath(`vessels.${context}.buddy`)
     if ( !isBuddy ) {
       app.debug('found buddy: %s', context) 
@@ -260,6 +276,10 @@ module.exports = function(app) {
           if ( !sent || resendAlerts || sent != sentName ) {
             app.debug('send notification for %s', context)
             notifications[context] = sentName
+            let relativeDeg = null
+            if ( alertBearing ) {
+              relativeDeg = relativeBearingDeg(myPos, position)
+            }
             app.handleMessage(plugin.id, {
               updates: [{
                 values: [{
@@ -267,7 +287,7 @@ module.exports = function(app) {
                   value: {
                     state: 'alert',
                     method,
-                    message: `Your buddy ${sentName} is near`
+                    message: alerts.nearMessage(sentName, relativeDeg)
                   }
                 }]
               }]
@@ -350,6 +370,12 @@ module.exports = function(app) {
         title: 'Alert Distance',
         description: 'Sent the notification when a buddy is this near (km)',
         default: 1
+      },
+      alertBearing: {
+        type: 'boolean',
+        title: 'Show bearing',
+        description: 'Include buddy bearing relative to heading in the notification (0° ahead)',
+        default: false
       }
     }
   }
