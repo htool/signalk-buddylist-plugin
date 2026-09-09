@@ -34,6 +34,7 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
 
 ## 4. Resend alert when distance changes by X metres
 
+- **Status:** done
 - **Outcome:** Optional movement-based resend, per ADR 003.
 - **ADR:** [003](adr/003-resend-on-distance.md)
 - **Done when:**

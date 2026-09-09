@@ -210,7 +210,7 @@ module.exports = function(app) {
         delta.updates.forEach(update => {
           update.values.forEach(pv => {
             if ( pv.path == 'navigation.position' ) {
-              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, props.alertBearing, pv.value)
+              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, props.alertBearing, props.resendAlertDistance, pv.value)
             }
           })
         })
@@ -247,7 +247,7 @@ module.exports = function(app) {
     return Math.round(rel) % 360
   }
 
-  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, alertBearing, position) {
+  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, alertBearing, resendAlertDistance, position) {
     const isBuddy = app.getPath(`vessels.${context}.buddy`)
     if ( !isBuddy ) {
       app.debug('found buddy: %s', context) 
@@ -288,10 +288,14 @@ module.exports = function(app) {
             method = existing.value.method
           }
           
-          app.debug('sent: ' + sent)
-          if ( !sent || resendAlerts || sent != sentName ) {
+          app.debug('sent: %j', sent)
+          const lastName = sent && (typeof sent === 'string' ? sent : sent.name)
+          const lastDist = sent && typeof sent === 'object' ? sent.distance : undefined
+          const delta = Number(resendAlertDistance)
+          const moved = delta > 0 && Number.isFinite(lastDist) && Math.abs(distance - lastDist) >= delta
+          if ( !sent || resendAlerts || lastName != sentName || moved ) {
             app.debug('send notification for %s', context)
-            notifications[context] = sentName
+            notifications[context] = { name: sentName, distance }
             app.handleMessage(plugin.id, {
               updates: [{
                 values: [{
@@ -383,6 +387,12 @@ module.exports = function(app) {
         title: 'Show bearing',
         description: 'Include buddy bearing relative to heading in the notification (0° ahead)',
         default: false
+      },
+      resendAlertDistance: {
+        type: 'number',
+        title: 'Resend when distance changes (m)',
+        description: 'Resend the alert when the buddy moves this many metres (0 = off). Independent of Resend Alerts.',
+        default: 0
       },
       alertDistance: {
         type: 'number',

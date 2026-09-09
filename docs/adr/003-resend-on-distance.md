@@ -1,6 +1,6 @@
 # ADR 003: Resend alert when distance changes by X metres
 
-Status: accepted (implement in features.md slice 4)
+Status: implemented
 
 ## Context
 

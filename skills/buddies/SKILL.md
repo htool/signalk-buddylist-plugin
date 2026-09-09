@@ -17,7 +17,7 @@ Read [AGENTS.md](../../AGENTS.md) first. Next slice is [docs/features.md](../../
 - Display name: `buddy.name || AIS name || urn`. If `buddy.name` is missing, append ` (name missing)` to the message. Still subscribe and still alert.
 - Keep v1 and v2 routes. Fix v1 with `.find`, do not copy v2 JSON onto v1.
 - Recode onto current `index.js`. Do not cherry-pick `fork-work-2021` (`checkBuddy` gained `resendAlerts`).
-- Slice 4: `resendAlertDistance` in metres, 0 = off. Latch `{ name, distance }`. Do not drop `resendAlerts`.
+- Slice 4 (`resendAlertDistance`) is on this branch. Do not replace `resendAlerts`.
 
 ## Do not
 
