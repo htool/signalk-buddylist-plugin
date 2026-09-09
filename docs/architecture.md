@@ -30,7 +30,7 @@ HTTP mutations (add / rename / delete) call `app.savePluginOptions`, then tear d
 |---|---|
 | `vessels.<urn>.buddy` | boolean on the buddy context (empty path, value `{ buddy: true/false }`) |
 | `notifications.buddy.<urn>` | alert / normal on self |
-| config `alertDistance` | number; **origin is km** (`* 1000`). Slice 2 switches this to NM (`* 1852`). |
+| config `alertDistance` | number, nautical miles; threshold is `alertDistance * 1852` metres |
 
 ## HTTP
 
@@ -39,7 +39,7 @@ HTTP mutations (add / rename / delete) call `app.savePluginOptions`, then tear d
 | v1 | `/signalk/v1/api/resources/buddies` |
 | v2 | `/signalk/v2/api/resources/buddies` (`plugin.getOpenApi`, `plugin.feature = "buddies"`) |
 
-v1 PUT rename still has `props.buddiesfind` (missing `.`). v2 PUT uses `.find`. See known-gaps.
+v1 PUT rename uses `props.buddies.find`. v2 PUT does too.
 
 ## Stop
 

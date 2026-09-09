@@ -1,6 +1,6 @@
 # ADR 001: Alert units and names
 
-Status: accepted (implement in features.md slice 2)
+Status: implemented
 
 ## Context
 

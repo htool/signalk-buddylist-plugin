@@ -10,6 +10,7 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
 
 ## 2. Alert NM, distance text, URN default, name-missing marker
 
+- **Status:** done
 - **Outcome:** Proximity alerts match ADR 001.
 - **ADR:** [001](adr/001-alert-units-and-names.md)
 - **Done when:**
