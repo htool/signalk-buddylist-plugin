@@ -17,6 +17,7 @@ Read [AGENTS.md](../../AGENTS.md) first. Next slice is [docs/features.md](../../
 - Display name: `buddy.name || AIS name || urn`. If `buddy.name` is missing, append ` (name missing)` to the message. Still subscribe and still alert.
 - Keep v1 and v2 routes. Fix v1 with `.find`, do not copy v2 JSON onto v1.
 - Recode onto current `index.js`. Do not cherry-pick `fork-work-2021` (`checkBuddy` gained `resendAlerts`).
+- Put new alert/resend behaviour in `lib/alerts.js` and add tests in `test/` in the same feature. `npm test` must pass.
 - `resendAlertDistance` is ignored unless `resendAlerts` is on. With resend on, 0 = every position; X > 0 = only after X metres.
 
 ## Do not
@@ -26,4 +27,4 @@ Read [AGENTS.md](../../AGENTS.md) first. Next slice is [docs/features.md](../../
 - Use COG as heading.
 - Bump the npm version.
 - Emit NMEA or touch signalk-server internals.
-- Expand this PR past features.md slice 4.
+- Expand a feature PR without tests for that slice.
