@@ -74,6 +74,7 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
 
 ## 8. Match local AIS and SK-group alerts
 
+- **Status:** done
 - **Outcome:** Opted-in MMSIs already in `vessels.*` get the SK-group alert/resend options.
 - **ADR:** [004](adr/004-signalk-buddies-roster.md)
 - **Done when:**
@@ -87,4 +88,4 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
 
 - Align v1 error shapes with v2
 - vhfinfo.org PHP + `sk_buddies` table (companion repo)
-- Replace internet seam if signalk-server publishes status
+- Replace internet seam if [signalk-server#3022](https://github.com/SignalK/signalk-server/issues/3022) ships

@@ -37,6 +37,9 @@ HTTP mutations (add / rename / delete) call `app.savePluginOptions`, then tear d
 | config `resendAlertDistance` | metres; ignored unless resend is on. 0 = every position; else `|Δdistance| ≥ X` |
 | config `skShare` | opt-in POST of self MMSI + name to vhfinfo directory |
 | config `skShareDays` | lease days, default 90; renew at half lease when directory HTTP succeeds |
+| config `skAlert` … `skResendAlertDistance` | same knobs as personal, for AIS-matched SK roster |
+| `vessels.<urn>.signalkBuddy` | SK-group flag; not `buddy` |
+| `notifications.signalkBuddy.<urn>` | SK-group near/away |
 
 ## HTTP
 

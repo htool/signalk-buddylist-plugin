@@ -23,8 +23,10 @@ const v2ApiBase = '/signalk/v2/api/resources/buddies'
 module.exports = function(app) {
   var plugin = {};
   var unsubscribes = []
+  var skUnsubscribes = []
   const notifications = {}
-  const shareState = { props: null, renewAtMs: null, failCount: 0, timer: null, shareOn: false }
+  const skNotifications = {}
+  const shareState = { props: null, renewAtMs: null, failCount: 0, timer: null, shareOn: false, rosterAtMs: 0 }
 
   plugin.start = function(props) {
     app.debug(`Loaded buddy list: ${JSON.stringify(props.buddies)}`)
@@ -35,6 +37,7 @@ module.exports = function(app) {
     shareState.failCount = 0
 
     setupSubscriptions(props)
+    refreshSkBuddies(props)
     if ( shareState.shareOn ) {
       pushShare(true)
     }
@@ -45,6 +48,9 @@ module.exports = function(app) {
         renewAtMs: shareState.renewAtMs
       }) ) {
         pushShare(true)
+      }
+      if ( Date.now() - (shareState.rosterAtMs || 0) > 15 * 60 * 1000 ) {
+        refreshSkBuddies(shareState.props)
       }
     }, 60 * 1000)
 
@@ -198,6 +204,7 @@ module.exports = function(app) {
         })
         stopSuscriptions()
         setupSubscriptions(props)
+        refreshSkBuddies(props)
       }
     })
   }
@@ -211,6 +218,7 @@ module.exports = function(app) {
 
         stopSuscriptions()
         setupSubscriptions(props)
+        refreshSkBuddies(props)
       }
     })
   }
@@ -229,11 +237,71 @@ module.exports = function(app) {
         delta.updates.forEach(update => {
           update.values.forEach(pv => {
             if ( pv.path == 'navigation.position' ) {
-              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, props.alertBearing, props.resendAlertDistance, pv.value)
+              checkBuddy(buddy.urn, buddy.name, pv.value, {
+                flag: 'buddy',
+                notif: 'buddy',
+                latch: notifications,
+                alert: props.alert,
+                alertDistance: props.alertDistance,
+                resendAlerts: props.resendAlerts,
+                alertBearing: props.alertBearing,
+                resendAlertDistance: props.resendAlertDistance
+              })
             }
           })
         })
       })
+    })
+  }
+
+  function stopSkSubscriptions () {
+    skUnsubscribes.forEach(f => f())
+    skUnsubscribes = []
+  }
+
+  function setupSkSubscriptions (props, matches) {
+    stopSkSubscriptions()
+    ;(matches || []).forEach(buddy => {
+      let command = {
+        context: `vessels.${buddy.urn}`,
+        subscribe: [{
+          path: `navigation.position`,
+          policy: 'instant'
+        }]
+      }
+      app.subscriptionmanager.subscribe(command, skUnsubscribes, subscription_error, delta => {
+        delta.updates.forEach(update => {
+          update.values.forEach(pv => {
+            if ( pv.path == 'navigation.position' ) {
+              checkBuddy(buddy.urn, buddy.name, pv.value, {
+                flag: 'signalkBuddy',
+                notif: 'signalkBuddy',
+                latch: skNotifications,
+                alert: props.skAlert,
+                alertDistance: props.skAlertDistance,
+                resendAlerts: props.skResendAlerts,
+                alertBearing: props.skAlertBearing,
+                resendAlertDistance: props.skResendAlertDistance
+              })
+            }
+          })
+        })
+      })
+    })
+  }
+
+  function refreshSkBuddies (props) {
+    directory.fetchRoster(global.fetch, directory.GET_URL).then(roster => {
+      shareState.rosterAtMs = Date.now()
+      const vessels = app.getPath('vessels') || {}
+      const matches = directory.matchRosterToVessels(
+        roster,
+        Object.keys(vessels),
+        unwrapSelf('mmsi')
+      )
+      setupSkSubscriptions(props, matches)
+    }).catch(err => {
+      app.debug('directory GET failed: %s', err.message)
     })
   }
 
@@ -258,21 +326,25 @@ module.exports = function(app) {
     return alerts.relativeBearingDeg(headingDeg, geolib.getGreatCircleBearing(myPos, position))
   }
 
-  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, alertBearing, resendAlertDistance, position) {
-    const isBuddy = app.getPath(`vessels.${context}.buddy`)
-    if ( !isBuddy ) {
-      app.debug('found buddy: %s', context) 
+  function checkBuddy(context, name, position, group) {
+    const flag = group.flag
+    const latch = group.latch
+    const isFlagged = app.getPath(`vessels.${context}.${flag}`)
+    if ( !isFlagged ) {
+      app.debug('found %s: %s', flag, context)
+      const value = {}
+      value[flag] = true
       app.handleMessage(plugin.id, {
         context: `vessels.${context}`,
         updates: [{
           values: [{
             path: '',
-            value: { buddy: true }
+            value
           }]
         }]
       })
     }
-    if ( alertEnabled ) {
+    if ( group.alert ) {
       const kname = app.getPath(`/vessels/${context}/name`)
       const myPos = app.getSelfPath('navigation.position.value')
       app.debug('my pos %j', myPos)
@@ -282,15 +354,15 @@ module.exports = function(app) {
         const sentName = alerts.displayName(name, kname, context)
         const nameNote = alerts.nameNote(name)
         let nearDetail = alerts.nearDetail(distance, null)
-        if ( alertBearing ) {
+        if ( group.alertBearing ) {
           const rel = relativeBearingDeg(myPos, position)
           if ( rel !== null ) {
             nearDetail = alerts.nearDetail(distance, rel)
           }
         }
-        if ( distance < alerts.rangeThresholdM(alertDistance) ) {
-          const sent = notifications[context]
-          const path = `notifications.buddy.${context}`
+        if ( distance < alerts.rangeThresholdM(group.alertDistance) ) {
+          const sent = latch[context]
+          const path = `notifications.${group.notif}.${context}`
           const existing = app.getSelfPath(path)
 
           let method = [ "visual", "sound" ]
@@ -303,11 +375,11 @@ module.exports = function(app) {
             sent,
             sentName,
             distance,
-            resendAlerts,
-            resendAlertDistance
+            resendAlerts: group.resendAlerts,
+            resendAlertDistance: group.resendAlertDistance
           }) ) {
             app.debug('send notification for %s', context)
-            notifications[context] = { name: sentName, distance }
+            latch[context] = { name: sentName, distance }
             app.handleMessage(plugin.id, {
               updates: [{
                 values: [{
@@ -321,13 +393,13 @@ module.exports = function(app) {
               }]
             })
           }
-        } else if ( notifications[context] ) {
+        } else if ( latch[context] ) {
           app.debug('clear notification for %s', context)
-          delete notifications[context]
+          delete latch[context]
           app.handleMessage(plugin.id, {
             updates: [{
               values: [{
-                path: `notifications.buddy.${context}`,
+                path: `notifications.${group.notif}.${context}`,
                 value: {
                   state: 'normal',
                   method: [],
@@ -356,6 +428,7 @@ module.exports = function(app) {
   function stopSuscriptions() {
     unsubscribes.forEach(f => f())
     unsubscribes = []
+    stopSkSubscriptions()
   }
 
   function unwrapSelf (path) {
@@ -460,6 +533,36 @@ module.exports = function(app) {
         title: 'Share for (days)',
         description: 'Lease length. Renewed at half this time when the directory is reachable. Default 90.',
         default: 90
+      },
+      skAlert: {
+        type: 'boolean',
+        title: 'Signal K buddy alert',
+        description: 'Send a notification when an opted-in Signal K buddy is near (AIS match)',
+        default: true
+      },
+      skAlertDistance: {
+        type: 'number',
+        title: 'Signal K buddy alert distance',
+        description: 'NM. Same unit as personal Alert Distance',
+        default: 1
+      },
+      skAlertBearing: {
+        type: 'boolean',
+        title: 'Signal K buddy show bearing',
+        description: 'Include relative bearing in the Signal K buddy notification',
+        default: false
+      },
+      skResendAlerts: {
+        type: 'boolean',
+        title: 'Signal K buddy resend alerts',
+        description: 'Send again while a Signal K buddy stays near',
+        default: false
+      },
+      skResendAlertDistance: {
+        type: 'number',
+        title: 'Signal K buddy resend when distance changes (m)',
+        description: 'Only used when Signal K buddy resend is on. 0 = every position; otherwise after that many metres.',
+        default: 0
       }
     }
   }

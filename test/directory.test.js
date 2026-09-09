@@ -60,4 +60,28 @@ test('schema includes skShare and skShareDays', () => {
   })
   assert.equal(plugin.schema.properties.skShare.default, false)
   assert.equal(plugin.schema.properties.skShareDays.default, 90)
+  assert.equal(plugin.schema.properties.skAlert.default, true)
+})
+
+test('parseRoster drops expired and bad MMSI', () => {
+  const now = Date.parse('2026-09-09T12:00:00Z')
+  const rows = directory.parseRoster([
+    { mmsi: '244670524', name: 'WAVE' },
+    { mmsi: '244750229', name: 'Dankbaarheid', expires_at: '2026-09-08T00:00:00Z' },
+    { mmsi: '123', name: 'nope' }
+  ], now)
+  assert.deepEqual(rows, [{ mmsi: '244670524', name: 'WAVE' }])
+})
+
+test('match roster to local AIS, exclude self', () => {
+  const roster = [
+    { mmsi: '244670524', name: 'SELF' },
+    { mmsi: '244750229', name: 'Dankbaarheid' },
+    { mmsi: '244000000', name: 'not here' }
+  ]
+  const vessels = ['urn:mrn:imo:mmsi:244670524', 'urn:mrn:imo:mmsi:244750229']
+  const matches = directory.matchRosterToVessels(roster, vessels, '244670524')
+  assert.deepEqual(matches, [
+    { urn: 'urn:mrn:imo:mmsi:244750229', name: 'Dankbaarheid' }
+  ])
 })
