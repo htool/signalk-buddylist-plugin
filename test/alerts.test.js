@@ -26,6 +26,10 @@ test('name missing note and AIS/urn fallback', () => {
     alerts.nearMessage('WAVE', undefined, '(400m)'),
     'Your buddy WAVE (name missing) is near (400m)'
   )
+  assert.equal(
+    alerts.nearMessage('WAVE', 'WAVE', '(400m)', 'htool'),
+    'Your buddy WAVE is near (400m); Discord @htool'
+  )
 })
 
 test('near detail: metres, optional relative bearing without leading zeros', () => {
@@ -107,11 +111,34 @@ test('schema order: alert options then resend options', () => {
     savePluginOptions: () => {}
   })
   assert.deepEqual(Object.keys(plugin.schema.properties), [
+    'personalHeading',
     'buddies',
     'alert',
     'alertDistance',
     'alertBearing',
     'resendAlerts',
-    'resendAlertDistance'
+    'resendAlertDistance',
+    'signalkHeading',
+    'skShare',
+    'skShareDays',
+    'skDiscord',
+    'skAlert',
+    'skAlertDistance',
+    'skAlertBearing',
+    'skResendAlerts',
+    'skResendAlertDistance',
+    'skRosterStatus',
+    'skRosterRefresh'
   ])
+  assert.equal(plugin.schema.properties.personalHeading.title, 'Personal buddies')
+  assert.equal(plugin.schema.properties.signalkHeading.title, 'Signal K buddies')
+  assert.equal(
+    plugin.schema.properties.signalkHeading.description,
+    'Opt-in where boatname and MMSI are shared.'
+  )
+  assert.equal(plugin.schema.properties.skRosterStatus.readOnly, true)
+  assert.equal(plugin.schema.properties.skRosterStatus.title, 'Directory status')
+  assert.equal(plugin.schema.properties.skRosterRefresh.title, 'Refresh now')
+  assert.equal(plugin.schema.properties.skDiscord.title, 'Discord username')
+  assert.equal(plugin.schema.properties.skRoster, undefined)
 })

@@ -15,6 +15,9 @@
 
 const geolib = require('geolib')
 const alerts = require('./lib/alerts')
+const directory = require('./lib/directory')
+const fs = require('fs')
+const path = require('path')
 
 const apiBase = '/signalk/v1/api/resources/buddies'
 const v2ApiBase = '/signalk/v2/api/resources/buddies'
@@ -22,13 +25,69 @@ const v2ApiBase = '/signalk/v2/api/resources/buddies'
 module.exports = function(app) {
   var plugin = {};
   var unsubscribes = []
+  var skUnsubscribes = []
   const notifications = {}
+  const skNotifications = {}
+  const shareState = {
+    props: null,
+    renewAtMs: null,
+    failCount: 0,
+    timer: null,
+    shareOn: false,
+    rosterAtMs: 0,
+    roster: [],
+    rosterFetchedAt: 0
+  }
+  const enqueueShare = directory.createShareQueue(item => {
+    return directory.postShare(global.fetch, directory.POST_URL, item.body).then(() => {
+      shareState.failCount = 0
+      if ( item.share ) {
+        shareState.renewAtMs = directory.nextRenewAtMs(Date.now(), item.body.days)
+      }
+    }).catch(err => {
+      shareState.failCount += 1
+      shareState.renewAtMs = Date.now() + directory.backoffMs(shareState.failCount)
+      app.debug('directory share failed: %s', err.message)
+    })
+  })
 
   plugin.start = function(props) {
     app.debug(`Loaded buddy list: ${JSON.stringify(props.buddies)}`)
     props.buddies = Array.isArray(props?.buddies) ?  props.buddies : []
-    
+    shareState.props = props
+    shareState.shareOn = !!props.skShare
+    shareState.renewAtMs = null
+    shareState.failCount = 0
+
     setupSubscriptions(props)
+    const cache = loadRosterCache(props)
+    shareState.roster = cache.roster
+    shareState.rosterFetchedAt = cache.fetchedAt
+    shareState.rosterAtMs = cache.fetchedAt || 0
+    props.skRosterStatus = directory.rosterStatusText({
+      count: directory.parseRoster(shareState.roster, Date.now(), unwrapSelf('mmsi')).length,
+      fetchedAtMs: shareState.rosterFetchedAt
+    })
+    stripRosterFromProps(props)
+    applySkRoster(props)
+    refreshSkRoster(props)
+    pushShare(shareState.shareOn)
+    shareState.timer = setInterval(() => {
+      if ( directory.shouldAttemptRenew({
+        share: shareState.shareOn,
+        nowMs: Date.now(),
+        renewAtMs: shareState.renewAtMs
+      }) ) {
+        pushShare(true)
+      }
+      if ( directory.shouldRefreshRoster({
+        nowMs: Date.now(),
+        fetchedAtMs: shareState.rosterAtMs,
+        intervalMs: directory.DAY_MS
+      }) ) {
+        refreshSkRoster(shareState.props)
+      }
+    }, 60 * 1000)
 
     app.get(apiBase, (req, res) => {
       const list = (props.buddies || []).map(buddy => {
@@ -180,6 +239,7 @@ module.exports = function(app) {
         })
         stopSuscriptions()
         setupSubscriptions(props)
+        applySkRoster(props)
       }
     })
   }
@@ -193,6 +253,7 @@ module.exports = function(app) {
 
         stopSuscriptions()
         setupSubscriptions(props)
+        applySkRoster(props)
       }
     })
   }
@@ -211,11 +272,143 @@ module.exports = function(app) {
         delta.updates.forEach(update => {
           update.values.forEach(pv => {
             if ( pv.path == 'navigation.position' ) {
-              checkBuddy(buddy.urn, buddy.name, props.alert, props.alertDistance, props.resendAlerts, props.alertBearing, props.resendAlertDistance, pv.value)
+              checkBuddy(buddy.urn, buddy.name, pv.value, {
+                flag: 'buddy',
+                notif: 'buddy',
+                latch: notifications,
+                alert: props.alert,
+                alertDistance: props.alertDistance,
+                resendAlerts: props.resendAlerts,
+                alertBearing: props.alertBearing,
+                resendAlertDistance: props.resendAlertDistance
+              })
             }
           })
         })
       })
+    })
+  }
+
+  function stopSkSubscriptions () {
+    skUnsubscribes.forEach(f => f())
+    skUnsubscribes = []
+  }
+
+  function setupSkSubscriptions (props, matches) {
+    stopSkSubscriptions()
+    ;(matches || []).forEach(buddy => {
+      let command = {
+        context: `vessels.${buddy.urn}`,
+        subscribe: [{
+          path: `navigation.position`,
+          policy: 'instant'
+        }]
+      }
+      app.subscriptionmanager.subscribe(command, skUnsubscribes, subscription_error, delta => {
+        delta.updates.forEach(update => {
+          update.values.forEach(pv => {
+            if ( pv.path == 'navigation.position' ) {
+              checkBuddy(buddy.urn, buddy.name, pv.value, {
+                flag: 'signalkBuddy',
+                notif: 'signalkBuddy',
+                latch: skNotifications,
+                alert: props.skAlert,
+                alertDistance: props.skAlertDistance,
+                resendAlerts: props.skResendAlerts,
+                alertBearing: props.skAlertBearing,
+                resendAlertDistance: props.skResendAlertDistance,
+                discord: buddy.discord
+              })
+            }
+          })
+        })
+      })
+    })
+  }
+
+  function rosterFile () {
+    return path.join(app.getDataDirPath(), 'sk-roster.json')
+  }
+
+  function loadRosterCache (props) {
+    let roster = []
+    let fetchedAt = 0
+    try {
+      const data = JSON.parse(fs.readFileSync(rosterFile(), 'utf8'))
+      roster = Array.isArray(data.skRoster) ? data.skRoster : []
+      fetchedAt = Number(data.skRosterFetchedAt) || 0
+    } catch (_) {}
+    if ( !roster.length && Array.isArray(props.skRoster) && props.skRoster.length ) {
+      roster = props.skRoster
+      fetchedAt = Number(props.skRosterFetchedAt) || fetchedAt
+    }
+    return { roster, fetchedAt }
+  }
+
+  function writeRosterCache (roster, fetchedAtMs) {
+    try {
+      fs.writeFileSync(rosterFile(), JSON.stringify({
+        skRoster: roster,
+        skRosterFetchedAt: fetchedAtMs || 0
+      }, null, 2))
+    } catch (err) {
+      app.debug('save SK roster file failed: %s', err.message)
+    }
+  }
+
+  function stripRosterFromProps (props) {
+    delete props.skRoster
+    delete props.skRosterFetchedAt
+  }
+
+  function applySkRoster (props) {
+    const roster = directory.parseRoster(shareState.roster || [], Date.now(), unwrapSelf('mmsi'))
+    const vessels = app.getPath('vessels') || {}
+    const matches = directory.matchRosterToVessels(
+      roster,
+      Object.keys(vessels),
+      unwrapSelf('mmsi')
+    )
+    setupSkSubscriptions(props, matches)
+  }
+
+  function persistSkRoster (props, roster, fetchedAtMs, failed) {
+    const selfMmsi = unwrapSelf('mmsi')
+    const rows = directory.parseRoster(roster || [], fetchedAtMs || Date.now(), selfMmsi)
+    if ( !failed ) {
+      shareState.roster = rows
+      shareState.rosterFetchedAt = fetchedAtMs
+      writeRosterCache(rows, fetchedAtMs)
+    }
+    const shown = failed
+      ? directory.parseRoster(shareState.roster || [], Date.now(), selfMmsi)
+      : rows
+    props.skRosterStatus = directory.rosterStatusText({
+      count: shown.length,
+      fetchedAtMs: shareState.rosterFetchedAt,
+      failed
+    })
+    props.skRosterRefresh = false
+    stripRosterFromProps(props)
+    app.savePluginOptions(props, err => {
+      if ( err ) {
+        app.debug('save SK roster failed: %s', err.message)
+      }
+    })
+  }
+
+  function refreshSkRoster (props) {
+    shareState.rosterAtMs = Date.now()
+    const selfMmsi = unwrapSelf('mmsi')
+    return directory.fetchRoster(global.fetch, directory.GET_URL, selfMmsi).then(roster => {
+      const fetchedAt = Date.now()
+      shareState.rosterAtMs = fetchedAt
+      persistSkRoster(props, roster, fetchedAt, false)
+      applySkRoster(props)
+    }).catch(err => {
+      app.debug('directory GET failed: %s', err.message)
+      persistSkRoster(props, shareState.roster, shareState.rosterFetchedAt, true)
+      applySkRoster(props)
     })
   }
 
@@ -240,21 +433,25 @@ module.exports = function(app) {
     return alerts.relativeBearingDeg(headingDeg, geolib.getGreatCircleBearing(myPos, position))
   }
 
-  function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, alertBearing, resendAlertDistance, position) {
-    const isBuddy = app.getPath(`vessels.${context}.buddy`)
-    if ( !isBuddy ) {
-      app.debug('found buddy: %s', context) 
+  function checkBuddy(context, name, position, group) {
+    const flag = group.flag
+    const latch = group.latch
+    const isFlagged = app.getPath(`vessels.${context}.${flag}`)
+    if ( !isFlagged ) {
+      app.debug('found %s: %s', flag, context)
+      const value = {}
+      value[flag] = true
       app.handleMessage(plugin.id, {
         context: `vessels.${context}`,
         updates: [{
           values: [{
             path: '',
-            value: { buddy: true }
+            value
           }]
         }]
       })
     }
-    if ( alertEnabled ) {
+    if ( group.alert ) {
       const kname = app.getPath(`/vessels/${context}/name`)
       const myPos = app.getSelfPath('navigation.position.value')
       app.debug('my pos %j', myPos)
@@ -264,15 +461,15 @@ module.exports = function(app) {
         const sentName = alerts.displayName(name, kname, context)
         const nameNote = alerts.nameNote(name)
         let nearDetail = alerts.nearDetail(distance, null)
-        if ( alertBearing ) {
+        if ( group.alertBearing ) {
           const rel = relativeBearingDeg(myPos, position)
           if ( rel !== null ) {
             nearDetail = alerts.nearDetail(distance, rel)
           }
         }
-        if ( distance < alerts.rangeThresholdM(alertDistance) ) {
-          const sent = notifications[context]
-          const path = `notifications.buddy.${context}`
+        if ( distance < alerts.rangeThresholdM(group.alertDistance) ) {
+          const sent = latch[context]
+          const path = `notifications.${group.notif}.${context}`
           const existing = app.getSelfPath(path)
 
           let method = [ "visual", "sound" ]
@@ -285,11 +482,11 @@ module.exports = function(app) {
             sent,
             sentName,
             distance,
-            resendAlerts,
-            resendAlertDistance
+            resendAlerts: group.resendAlerts,
+            resendAlertDistance: group.resendAlertDistance
           }) ) {
             app.debug('send notification for %s', context)
-            notifications[context] = { name: sentName, distance }
+            latch[context] = { name: sentName, distance }
             app.handleMessage(plugin.id, {
               updates: [{
                 values: [{
@@ -297,23 +494,23 @@ module.exports = function(app) {
                   value: {
                     state: 'alert',
                     method,
-                    message: alerts.nearMessage(sentName, name, nearDetail)
+                    message: alerts.nearMessage(sentName, name, nearDetail, group.discord)
                   }
                 }]
               }]
             })
           }
-        } else if ( notifications[context] ) {
+        } else if ( latch[context] ) {
           app.debug('clear notification for %s', context)
-          delete notifications[context]
+          delete latch[context]
           app.handleMessage(plugin.id, {
             updates: [{
               values: [{
-                path: `notifications.buddy.${context}`,
+                path: `notifications.${group.notif}.${context}`,
                 value: {
                   state: 'normal',
                   method: [],
-                  message: `Your buddy ${sentName}${nameNote} is away`
+                  message: `Your buddy ${sentName}${nameNote}${alerts.discordNote(group.discord)} is away`
               }
               }]
             }]
@@ -324,12 +521,39 @@ module.exports = function(app) {
   }
 
   plugin.stop = function() {
+    if ( shareState.timer ) {
+      clearInterval(shareState.timer)
+      shareState.timer = null
+    }
+    shareState.shareOn = false
     stopSuscriptions()
   }
 
   function stopSuscriptions() {
     unsubscribes.forEach(f => f())
     unsubscribes = []
+    stopSkSubscriptions()
+  }
+
+  function unwrapSelf (path) {
+    return directory.unwrapPath(app.getSelfPath(path))
+  }
+
+  function pushShare (share) {
+    const id = directory.identityFromSelf(unwrapSelf('mmsi'), unwrapSelf('name'))
+    if ( !id.ok ) {
+      app.setProviderError(id.error)
+      return
+    }
+    const days = directory.clampShareDays(shareState.props && shareState.props.skShareDays)
+    const body = directory.sharePayload({
+      mmsi: id.mmsi,
+      name: id.name,
+      share,
+      days,
+      discord: shareState.props && shareState.props.skDiscord
+    })
+    enqueueShare({ share: !!share, body })
   }
   
   plugin.id = "signalk-buddylist-plugin"
@@ -338,11 +562,44 @@ module.exports = function(app) {
 
   plugin.feature = "buddies"
   plugin.getOpenApi = () => require('./openApi.json')
-  plugin.registerWithRouter = () => {}
+  plugin.registerWithRouter = function (router) {
+    router.get('/refresh', (req, res) => {
+      res.type('html').send(`<!doctype html>
+<meta charset="utf-8">
+<title>Refresh Signal K buddies</title>
+<body style="font-family:sans-serif;margin:2rem">
+<p>GET the directory and update the cache on this server. This vessel is omitted from the list.</p>
+<form method="post" action="refresh">
+  <button type="submit">Refresh now</button>
+</form>
+</body>`)
+    })
+    router.post('/refresh', (req, res) => {
+      if ( !shareState.props ) {
+        res.status(409).json({ error: 'plugin not started' })
+        return
+      }
+      refreshSkRoster(shareState.props).then(() => {
+        res.json({
+          ok: true,
+          status: shareState.props.skRosterStatus,
+          roster: shareState.roster
+        })
+      }).catch(err => {
+        res.status(502).json({ error: err.message })
+      })
+    })
+  }
 
   plugin.schema = {
     type: "object",
     properties: {
+      personalHeading: {
+        type: 'object',
+        title: 'Personal buddies',
+        description: 'Manual URN list. Alert options in this section apply only to that list.',
+        properties: {}
+      },
       buddies: {
         type: "array",
         title: "Buddies",
@@ -393,9 +650,79 @@ module.exports = function(app) {
         title: 'Resend when distance changes (m)',
         description: 'Only used when Resend Alerts is on. 0 = every position; otherwise resend after this many metres.',
         default: 0
+      },
+      signalkHeading: {
+        type: 'object',
+        title: 'Signal K buddies',
+        description: 'Opt-in where boatname and MMSI are shared.',
+        properties: {}
+      },
+      skShare: {
+        type: 'boolean',
+        title: 'Share this vessel',
+        description: 'POST this vessel MMSI, name, and optional Discord username to the directory.',
+        default: false
+      },
+      skShareDays: {
+        type: 'number',
+        title: 'Share for (days)',
+        description: 'Lease length. Renewed at half this time when the directory is reachable. Default 90.',
+        default: 90
+      },
+      skDiscord: {
+        type: 'string',
+        title: 'Discord username',
+        description: 'Optional. Shared with the directory so others can ping you. Leading @ is stripped. Letters, numbers, underscore, and period; max 32.',
+        default: '',
+        maxLength: 32
+      },
+      skAlert: {
+        type: 'boolean',
+        title: 'Alert',
+        description: 'Send a notification when an opted-in Signal K buddy is near (AIS match)',
+        default: true
+      },
+      skAlertDistance: {
+        type: 'number',
+        title: 'Alert Distance',
+        description: 'Send the notification when a Signal K buddy is this near (NM)',
+        default: 1
+      },
+      skAlertBearing: {
+        type: 'boolean',
+        title: 'Show bearing',
+        description: 'Include relative bearing in the Signal K buddy notification (0° ahead)',
+        default: false
+      },
+      skResendAlerts: {
+        type: 'boolean',
+        title: 'Resend Alerts',
+        description: 'Send again while a Signal K buddy stays near. If Resend when distance changes is 0, every position; otherwise only after that many metres.',
+        default: false
+      },
+      skResendAlertDistance: {
+        type: 'number',
+        title: 'Resend when distance changes (m)',
+        description: 'Only used when Resend Alerts is on. 0 = every position; otherwise resend after this many metres.',
+        default: 0
+      },
+      skRosterStatus: {
+        type: 'string',
+        title: 'Directory status',
+        description: 'Cached count on this server (this vessel omitted), and the date and time of the last successful HTTP GET (UTC). Reload this page after Save to see an update.',
+        default: 'None loaded. No successful GET yet',
+        readOnly: true
+      },
+      skRosterRefresh: {
+        type: 'boolean',
+        title: 'Refresh now',
+        description: 'Tick, then Save, to GET the directory now.',
+        default: false
       }
     }
   }
+
+  plugin.uiSchema = {}
 
   return plugin;
 }

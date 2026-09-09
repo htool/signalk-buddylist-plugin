@@ -3,7 +3,7 @@ name: buddies
 description: >-
   Change Signal K buddy-list alerts and HTTP APIs in this plugin.
   Use when editing signalk-buddylist-plugin, notifications.buddy,
-  alertDistance, buddy.name, or /signalk/v1|v2/api/resources/buddies.
+  alertDistance, buddy.name, SK buddies share, or /signalk/v1|v2/api/resources/buddies.
 ---
 
 # Buddy list
@@ -19,6 +19,7 @@ Read [AGENTS.md](../../AGENTS.md) first. Next slice is [docs/features.md](../../
 - Recode onto current `index.js`. Do not cherry-pick `fork-work-2021` (`checkBuddy` gained `resendAlerts`).
 - Put new alert/resend behaviour in `lib/alerts.js` and add tests in `test/` in the same feature. `npm test` must pass.
 - `resendAlertDistance` is ignored unless `resendAlerts` is on. With resend on, 0 = every position; X > 0 = only after X metres.
+- SK buddies: checkbox POST to vhfinfo; lease `skShareDays` default 90; renew at half lease. Optional `skDiscord` POSTed with share; included in SK-buddy near/away text. Cache roster in plugin data dir `sk-roster.json` (survives restart). Omit this vessel. GET at start, at most once a day, or Refresh now. Show loaded count and last GET time; do not list SK boats in the admin form. Match local AIS only. Separate `signalkBuddy` flag and `notifications.signalkBuddy`. `plugin.stop` does not unshare. Start POSTs `share: false` only when `skShare` is off.
 
 ## Do not
 
@@ -28,3 +29,7 @@ Read [AGENTS.md](../../AGENTS.md) first. Next slice is [docs/features.md](../../
 - Bump the npm version.
 - Emit NMEA or touch signalk-server internals.
 - Expand a feature PR without tests for that slice.
+- Reuse `buddy` / `notifications.buddy` for the SK group.
+- Encode fake AIS onto N2K.
+- Use magic-link or LTE plugin paths for opt-in / internet.
+- Open a signalk-server issue unless the human asked.

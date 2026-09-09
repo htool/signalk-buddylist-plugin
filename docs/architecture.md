@@ -7,7 +7,7 @@ Maintain a configured list of other vessels (buddies). When a buddy's `navigatio
 ## Data flow
 
 ```
-plugin config (urn, optional name, alert, alertDistance, alertBearing, resendAlerts, resendAlertDistance)
+plugin config (urn, optional name, alert…, skShare) + sk-roster.json
         │
         ▼
 subscribe vessels.<urn>.navigation.position  (policy: instant)
@@ -35,6 +35,28 @@ HTTP mutations (add / rename / delete) call `app.savePluginOptions`, then tear d
 | config `alertBearing` | if true, alert may include relative ° (`headingTrue` else magnetic) |
 | config `resendAlerts` | if true, send again while in range |
 | config `resendAlertDistance` | metres; ignored unless resend is on. 0 = every position; else `|Δdistance| ≥ X` |
+| config `skShare` | opt-in POST of self MMSI + name to vhfinfo directory. Uncheck POSTs `share: false`. Plugin stop/restart with share still on does not delete |
+| config `skShareDays` | lease days, default 90; renew at half lease when directory HTTP succeeds |
+| config `skDiscord` | optional Discord username; POSTed with share; shown in SK-buddy near/away text |
+| plugin data `sk-roster.json` | cached directory `{ mmsi, name, discord?, expires_at }[]` plus last GET; this vessel omitted; not in the admin form |
+| config `skRosterStatus` | read-only: loaded count + date/time of last successful HTTP GET (UTC) |
+| config `skRosterRefresh` | tick + Save forces a directory GET |
+| config `skAlert` … `skResendAlertDistance` | same knobs as personal, for AIS-matched SK roster |
+| `vessels.<urn>.signalkBuddy` | SK-group flag; not `buddy` |
+| `notifications.signalkBuddy.<urn>` | SK-group near/away |
+
+## Storage
+
+Nothing off-boat except the opt-in directory row (MMSI, name, optional Discord, lease). No GPS.
+
+| Place | Holds |
+|---|---|
+| Plugin config JSON | Personal buddies, alert knobs, share checkbox, lease days, optional Discord username |
+| Plugin data `sk-roster.json` | Cached directory list (no positions); this vessel omitted |
+| vhfinfo.org `sk_buddies` | MMSI, name, optional Discord, lease; POST/GET `sk-buddies.php` |
+| Live deltas | `buddy` / `notifications.buddy` (personal); `signalkBuddy` / `notifications.signalkBuddy` (SK group) |
+
+HTTP `/signalk/v1|v2/api/resources/buddies` is the personal list only.
 
 ## HTTP
 
@@ -47,4 +69,4 @@ v1 PUT rename uses `props.buddies.find`. v2 PUT does too.
 
 ## Stop
 
-`plugin.stop` unsubscribes all position subscriptions.
+`plugin.stop` unsubscribes all position subscriptions. It does not unshare. Unshare is POST `share: false` on the next start when `skShare` is off.

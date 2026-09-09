@@ -6,3 +6,5 @@
 - **Notification path** uses the buddy urn as a path segment. Odd characters in a urn could be awkward for some clients; not changing that here.
 - **Magnetic fallback** is not the same reference as a true great-circle bearing. Prefer `headingTrue` when it exists.
 - **COG** is not used as heading.
+- **Internet up:** No path or `app.*` yet. Opened [signalk-server#3022](https://github.com/SignalK/signalk-server/issues/3022). Workaround: directory HTTP success behind `lib/directory.js`. Check back when that issue is decided. Do not use LTE plugin paths.
+- **SK buddies directory** live POST/GET is vhfinfo.org PHP (not in this repo). Plugin tests mock HTTP.
