@@ -21,7 +21,18 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
   - v1 PUT `props.buddiesfind` is `.find` (same commit; one-line bug)
 - **Out of scope:** heading in the message, skipping unnamed buddies, version bump, new APIs.
 
+## 3. Optional relative bearing in the alert
+
+- **Outcome:** Optional bearing vs heading in the notification, per ADR 002.
+- **ADR:** [002](adr/002-alert-bearing.md)
+- **Done when:**
+  - schema `alertBearing` boolean, default false
+  - when on: `(412m, 47°)` using headingTrue else headingMagnetic
+  - no leading zeros; omit bearing if both headings missing
+- **Out of scope:** COG, magnetic/true suffix, resend-on-distance (separate PR), version bump.
+
 ## Later (not this PR)
 
+- Resend alert when distance changes by X metres (`resendAlertDistance`, default 0)
 - Tests for distance threshold and notification text
 - Align v1 error shapes with v2
