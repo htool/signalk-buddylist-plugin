@@ -16,6 +16,8 @@
 const geolib = require('geolib')
 const alerts = require('./lib/alerts')
 const directory = require('./lib/directory')
+const fs = require('fs')
+const path = require('path')
 
 const apiBase = '/signalk/v1/api/resources/buddies'
 const v2ApiBase = '/signalk/v2/api/resources/buddies'
@@ -26,7 +28,28 @@ module.exports = function(app) {
   var skUnsubscribes = []
   const notifications = {}
   const skNotifications = {}
-  const shareState = { props: null, renewAtMs: null, failCount: 0, timer: null, shareOn: false, rosterAtMs: 0 }
+  const shareState = {
+    props: null,
+    renewAtMs: null,
+    failCount: 0,
+    timer: null,
+    shareOn: false,
+    rosterAtMs: 0,
+    roster: [],
+    rosterFetchedAt: 0
+  }
+  const enqueueShare = directory.createShareQueue(item => {
+    return directory.postShare(global.fetch, directory.POST_URL, item.body).then(() => {
+      shareState.failCount = 0
+      if ( item.share ) {
+        shareState.renewAtMs = directory.nextRenewAtMs(Date.now(), item.body.days)
+      }
+    }).catch(err => {
+      shareState.failCount += 1
+      shareState.renewAtMs = Date.now() + directory.backoffMs(shareState.failCount)
+      app.debug('directory share failed: %s', err.message)
+    })
+  })
 
   plugin.start = function(props) {
     app.debug(`Loaded buddy list: ${JSON.stringify(props.buddies)}`)
@@ -37,10 +60,18 @@ module.exports = function(app) {
     shareState.failCount = 0
 
     setupSubscriptions(props)
-    refreshSkBuddies(props)
-    if ( shareState.shareOn ) {
-      pushShare(true)
-    }
+    const cache = loadRosterCache(props)
+    shareState.roster = cache.roster
+    shareState.rosterFetchedAt = cache.fetchedAt
+    shareState.rosterAtMs = cache.fetchedAt || 0
+    props.skRosterStatus = directory.rosterStatusText({
+      count: directory.parseRoster(shareState.roster, Date.now(), unwrapSelf('mmsi')).length,
+      fetchedAtMs: shareState.rosterFetchedAt
+    })
+    stripRosterFromProps(props)
+    applySkRoster(props)
+    refreshSkRoster(props)
+    pushShare(shareState.shareOn)
     shareState.timer = setInterval(() => {
       if ( directory.shouldAttemptRenew({
         share: shareState.shareOn,
@@ -49,8 +80,12 @@ module.exports = function(app) {
       }) ) {
         pushShare(true)
       }
-      if ( Date.now() - (shareState.rosterAtMs || 0) > 15 * 60 * 1000 ) {
-        refreshSkBuddies(shareState.props)
+      if ( directory.shouldRefreshRoster({
+        nowMs: Date.now(),
+        fetchedAtMs: shareState.rosterAtMs,
+        intervalMs: directory.DAY_MS
+      }) ) {
+        refreshSkRoster(shareState.props)
       }
     }, 60 * 1000)
 
@@ -204,7 +239,7 @@ module.exports = function(app) {
         })
         stopSuscriptions()
         setupSubscriptions(props)
-        refreshSkBuddies(props)
+        applySkRoster(props)
       }
     })
   }
@@ -218,7 +253,7 @@ module.exports = function(app) {
 
         stopSuscriptions()
         setupSubscriptions(props)
-        refreshSkBuddies(props)
+        applySkRoster(props)
       }
     })
   }
@@ -281,7 +316,8 @@ module.exports = function(app) {
                 alertDistance: props.skAlertDistance,
                 resendAlerts: props.skResendAlerts,
                 alertBearing: props.skAlertBearing,
-                resendAlertDistance: props.skResendAlertDistance
+                resendAlertDistance: props.skResendAlertDistance,
+                discord: buddy.discord
               })
             }
           })
@@ -290,18 +326,89 @@ module.exports = function(app) {
     })
   }
 
-  function refreshSkBuddies (props) {
-    directory.fetchRoster(global.fetch, directory.GET_URL).then(roster => {
-      shareState.rosterAtMs = Date.now()
-      const vessels = app.getPath('vessels') || {}
-      const matches = directory.matchRosterToVessels(
-        roster,
-        Object.keys(vessels),
-        unwrapSelf('mmsi')
-      )
-      setupSkSubscriptions(props, matches)
+  function rosterFile () {
+    return path.join(app.getDataDirPath(), 'sk-roster.json')
+  }
+
+  function loadRosterCache (props) {
+    let roster = []
+    let fetchedAt = 0
+    try {
+      const data = JSON.parse(fs.readFileSync(rosterFile(), 'utf8'))
+      roster = Array.isArray(data.skRoster) ? data.skRoster : []
+      fetchedAt = Number(data.skRosterFetchedAt) || 0
+    } catch (_) {}
+    if ( !roster.length && Array.isArray(props.skRoster) && props.skRoster.length ) {
+      roster = props.skRoster
+      fetchedAt = Number(props.skRosterFetchedAt) || fetchedAt
+    }
+    return { roster, fetchedAt }
+  }
+
+  function writeRosterCache (roster, fetchedAtMs) {
+    try {
+      fs.writeFileSync(rosterFile(), JSON.stringify({
+        skRoster: roster,
+        skRosterFetchedAt: fetchedAtMs || 0
+      }, null, 2))
+    } catch (err) {
+      app.debug('save SK roster file failed: %s', err.message)
+    }
+  }
+
+  function stripRosterFromProps (props) {
+    delete props.skRoster
+    delete props.skRosterFetchedAt
+  }
+
+  function applySkRoster (props) {
+    const roster = directory.parseRoster(shareState.roster || [], Date.now(), unwrapSelf('mmsi'))
+    const vessels = app.getPath('vessels') || {}
+    const matches = directory.matchRosterToVessels(
+      roster,
+      Object.keys(vessels),
+      unwrapSelf('mmsi')
+    )
+    setupSkSubscriptions(props, matches)
+  }
+
+  function persistSkRoster (props, roster, fetchedAtMs, failed) {
+    const selfMmsi = unwrapSelf('mmsi')
+    const rows = directory.parseRoster(roster || [], fetchedAtMs || Date.now(), selfMmsi)
+    if ( !failed ) {
+      shareState.roster = rows
+      shareState.rosterFetchedAt = fetchedAtMs
+      writeRosterCache(rows, fetchedAtMs)
+    }
+    const shown = failed
+      ? directory.parseRoster(shareState.roster || [], Date.now(), selfMmsi)
+      : rows
+    props.skRosterStatus = directory.rosterStatusText({
+      count: shown.length,
+      fetchedAtMs: shareState.rosterFetchedAt,
+      failed
+    })
+    props.skRosterRefresh = false
+    stripRosterFromProps(props)
+    app.savePluginOptions(props, err => {
+      if ( err ) {
+        app.debug('save SK roster failed: %s', err.message)
+      }
+    })
+  }
+
+  function refreshSkRoster (props) {
+    shareState.rosterAtMs = Date.now()
+    const selfMmsi = unwrapSelf('mmsi')
+    return directory.fetchRoster(global.fetch, directory.GET_URL, selfMmsi).then(roster => {
+      const fetchedAt = Date.now()
+      shareState.rosterAtMs = fetchedAt
+      persistSkRoster(props, roster, fetchedAt, false)
+      applySkRoster(props)
     }).catch(err => {
       app.debug('directory GET failed: %s', err.message)
+      persistSkRoster(props, shareState.roster, shareState.rosterFetchedAt, true)
+      applySkRoster(props)
     })
   }
 
@@ -387,7 +494,7 @@ module.exports = function(app) {
                   value: {
                     state: 'alert',
                     method,
-                    message: alerts.nearMessage(sentName, name, nearDetail)
+                    message: alerts.nearMessage(sentName, name, nearDetail, group.discord)
                   }
                 }]
               }]
@@ -403,7 +510,7 @@ module.exports = function(app) {
                 value: {
                   state: 'normal',
                   method: [],
-                  message: `Your buddy ${sentName}${nameNote} is away`
+                  message: `Your buddy ${sentName}${nameNote}${alerts.discordNote(group.discord)} is away`
               }
               }]
             }]
@@ -417,9 +524,6 @@ module.exports = function(app) {
     if ( shareState.timer ) {
       clearInterval(shareState.timer)
       shareState.timer = null
-    }
-    if ( shareState.shareOn ) {
-      pushShare(false)
     }
     shareState.shareOn = false
     stopSuscriptions()
@@ -446,18 +550,10 @@ module.exports = function(app) {
       mmsi: id.mmsi,
       name: id.name,
       share,
-      days
+      days,
+      discord: shareState.props && shareState.props.skDiscord
     })
-    directory.postShare(global.fetch, directory.POST_URL, body).then(() => {
-      shareState.failCount = 0
-      if ( share ) {
-        shareState.renewAtMs = directory.nextRenewAtMs(Date.now(), days)
-      }
-    }).catch(err => {
-      shareState.failCount += 1
-      shareState.renewAtMs = Date.now() + directory.backoffMs(shareState.failCount)
-      app.debug('directory share failed: %s', err.message)
-    })
+    enqueueShare({ share: !!share, body })
   }
   
   plugin.id = "signalk-buddylist-plugin"
@@ -466,7 +562,34 @@ module.exports = function(app) {
 
   plugin.feature = "buddies"
   plugin.getOpenApi = () => require('./openApi.json')
-  plugin.registerWithRouter = () => {}
+  plugin.registerWithRouter = function (router) {
+    router.get('/refresh', (req, res) => {
+      res.type('html').send(`<!doctype html>
+<meta charset="utf-8">
+<title>Refresh Signal K buddies</title>
+<body style="font-family:sans-serif;margin:2rem">
+<p>GET the directory and update the cache on this server. This vessel is omitted from the list.</p>
+<form method="post" action="refresh">
+  <button type="submit">Refresh now</button>
+</form>
+</body>`)
+    })
+    router.post('/refresh', (req, res) => {
+      if ( !shareState.props ) {
+        res.status(409).json({ error: 'plugin not started' })
+        return
+      }
+      refreshSkRoster(shareState.props).then(() => {
+        res.json({
+          ok: true,
+          status: shareState.props.skRosterStatus,
+          roster: shareState.roster
+        })
+      }).catch(err => {
+        res.status(502).json({ error: err.message })
+      })
+    })
+  }
 
   plugin.schema = {
     type: "object",
@@ -531,13 +654,13 @@ module.exports = function(app) {
       signalkHeading: {
         type: 'object',
         title: 'Signal K buddies',
-        description: 'Opt-in directory. Other opted-in boats match you on AIS. No extra GPS. Alert options in this section are separate from the list above.',
+        description: 'Opt-in where boatname and MMSI are shared.',
         properties: {}
       },
       skShare: {
         type: 'boolean',
         title: 'Share this vessel',
-        description: 'POST this vessel MMSI and name to the directory.',
+        description: 'POST this vessel MMSI, name, and optional Discord username to the directory.',
         default: false
       },
       skShareDays: {
@@ -545,6 +668,13 @@ module.exports = function(app) {
         title: 'Share for (days)',
         description: 'Lease length. Renewed at half this time when the directory is reachable. Default 90.',
         default: 90
+      },
+      skDiscord: {
+        type: 'string',
+        title: 'Discord username',
+        description: 'Optional. Shared with the directory so others can ping you. Leading @ is stripped. Letters, numbers, underscore, and period; max 32.',
+        default: '',
+        maxLength: 32
       },
       skAlert: {
         type: 'boolean',
@@ -575,9 +705,24 @@ module.exports = function(app) {
         title: 'Resend when distance changes (m)',
         description: 'Only used when Resend Alerts is on. 0 = every position; otherwise resend after this many metres.',
         default: 0
+      },
+      skRosterStatus: {
+        type: 'string',
+        title: 'Directory status',
+        description: 'Cached count on this server (this vessel omitted), and the date and time of the last successful HTTP GET (UTC). Reload this page after Save to see an update.',
+        default: 'None loaded. No successful GET yet',
+        readOnly: true
+      },
+      skRosterRefresh: {
+        type: 'boolean',
+        title: 'Refresh now',
+        description: 'Tick, then Save, to GET the directory now.',
+        default: false
       }
     }
   }
+
+  plugin.uiSchema = {}
 
   return plugin;
 }

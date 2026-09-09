@@ -66,7 +66,7 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
 - **ADR:** [004](adr/004-signalk-buddies-roster.md)
 - **Done when:**
   - schema `skShare` (default false), `skShareDays` (default 90)
-  - POST `{ mmsi, name, share, days }` / `share: false` on uncheck or stop
+  - POST `{ mmsi, name, share, days }` / `share: false` when share is unchecked (not on plugin stop/restart)
   - no POST if MMSI or name missing; provider error
   - renew at half lease and on start; backoff on failure
   - internet check is one function in `lib/` (directory HTTP success); tests cover lease math and skip-when-offline
@@ -82,6 +82,8 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
   - duplicate alert knobs; same `checkBuddy` / `lib/alerts.js` with a second latch
   - `vessels.<urn>.signalkBuddy`; `notifications.signalkBuddy.<urn>`
   - tests: match, exclude self, expired roster row ignored
+  - roster cached in plugin config with expiry; admin shows loaded count and last successful GET time; GET on start, at most once a day, or Refresh now
+  - optional `skDiscord` POSTed with share; SK-buddy near/away text includes `Discord @user`
 - **Out of scope:** fake AIS / NMEA, magic-link, position upload, version bump.
 
 ## Later (not this PR)
