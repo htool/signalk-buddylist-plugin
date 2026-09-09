@@ -38,11 +38,12 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
 - **Outcome:** Optional movement-based resend, per ADR 003.
 - **ADR:** [003](adr/003-resend-on-distance.md)
 - **Done when:**
-  - schema `resendAlertDistance` number, metres, default 0 (off)
+  - schema `resendAlertDistance` number, metres, default 0
   - latch is `{ name, distance }`
-  - resend on first enter, name change, or `|Δdistance| ≥ X` when X > 0
-  - `resendAlerts` still means every position
-- **Out of scope:** replacing `resendAlerts`, version bump, tests.
+  - distance resend runs **only if** `resendAlerts` is on
+  - with resend on: X = 0 every position; X > 0 only when `|Δdistance| ≥ X`
+  - schema order: alert, alertDistance, alertBearing, then resendAlerts, resendAlertDistance
+- **Out of scope:** version bump, tests.
 
 ## Later (not this PR)
 
