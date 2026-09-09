@@ -32,8 +32,18 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
   - no leading zeros; omit bearing if both headings missing
 - **Out of scope:** COG, magnetic/true suffix, resend-on-distance (separate PR), version bump.
 
+## 4. Resend alert when distance changes by X metres
+
+- **Outcome:** Optional movement-based resend, per ADR 003.
+- **ADR:** [003](adr/003-resend-on-distance.md)
+- **Done when:**
+  - schema `resendAlertDistance` number, metres, default 0 (off)
+  - latch is `{ name, distance }`
+  - resend on first enter, name change, or `|Δdistance| ≥ X` when X > 0
+  - `resendAlerts` still means every position
+- **Out of scope:** replacing `resendAlerts`, version bump, tests.
+
 ## Later (not this PR)
 
-- Resend alert when distance changes by X metres (`resendAlertDistance`, default 0)
 - Tests for distance threshold and notification text
 - Align v1 error shapes with v2
