@@ -7,7 +7,7 @@ Maintain a configured list of other vessels (buddies). When a buddy's `navigatio
 ## Data flow
 
 ```
-plugin config (urn, optional name, alert, alertDistance, resendAlerts, alertBearing)
+plugin config (urn, optional name, alert, alertDistance, resendAlerts, alertBearing, resendAlertDistance)
         │
         ▼
 subscribe vessels.<urn>.navigation.position  (policy: instant)
@@ -33,6 +33,7 @@ HTTP mutations (add / rename / delete) call `app.savePluginOptions`, then tear d
 | `notifications.buddy.<urn>` | alert / normal on self |
 | config `alertDistance` | number, nautical miles; threshold is `alertDistance * 1852` metres |
 | config `alertBearing` | if true, alert may include relative ° (`headingTrue` else magnetic) |
+| config `resendAlertDistance` | metres; 0 = off. Resend when `|Δdistance| ≥ X`. `resendAlerts` still means every position |
 
 ## HTTP
 
