@@ -61,6 +61,7 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
 
 ## 7. Opt-in directory client (lease + POST)
 
+- **Status:** done
 - **Outcome:** Checkbox shares MMSI + name with a 90-day lease; DHCP-style renew.
 - **ADR:** [004](adr/004-signalk-buddies-roster.md)
 - **Done when:**

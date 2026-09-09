@@ -15,6 +15,7 @@
 
 const geolib = require('geolib')
 const alerts = require('./lib/alerts')
+const directory = require('./lib/directory')
 
 const apiBase = '/signalk/v1/api/resources/buddies'
 const v2ApiBase = '/signalk/v2/api/resources/buddies'
@@ -23,12 +24,29 @@ module.exports = function(app) {
   var plugin = {};
   var unsubscribes = []
   const notifications = {}
+  const shareState = { props: null, renewAtMs: null, failCount: 0, timer: null, shareOn: false }
 
   plugin.start = function(props) {
     app.debug(`Loaded buddy list: ${JSON.stringify(props.buddies)}`)
     props.buddies = Array.isArray(props?.buddies) ?  props.buddies : []
-    
+    shareState.props = props
+    shareState.shareOn = !!props.skShare
+    shareState.renewAtMs = null
+    shareState.failCount = 0
+
     setupSubscriptions(props)
+    if ( shareState.shareOn ) {
+      pushShare(true)
+    }
+    shareState.timer = setInterval(() => {
+      if ( directory.shouldAttemptRenew({
+        share: shareState.shareOn,
+        nowMs: Date.now(),
+        renewAtMs: shareState.renewAtMs
+      }) ) {
+        pushShare(true)
+      }
+    }, 60 * 1000)
 
     app.get(apiBase, (req, res) => {
       const list = (props.buddies || []).map(buddy => {
@@ -324,12 +342,49 @@ module.exports = function(app) {
   }
 
   plugin.stop = function() {
+    if ( shareState.timer ) {
+      clearInterval(shareState.timer)
+      shareState.timer = null
+    }
+    if ( shareState.shareOn ) {
+      pushShare(false)
+    }
+    shareState.shareOn = false
     stopSuscriptions()
   }
 
   function stopSuscriptions() {
     unsubscribes.forEach(f => f())
     unsubscribes = []
+  }
+
+  function unwrapSelf (path) {
+    return directory.unwrapPath(app.getSelfPath(path))
+  }
+
+  function pushShare (share) {
+    const id = directory.identityFromSelf(unwrapSelf('mmsi'), unwrapSelf('name'))
+    if ( !id.ok ) {
+      app.setProviderError(id.error)
+      return
+    }
+    const days = directory.clampShareDays(shareState.props && shareState.props.skShareDays)
+    const body = directory.sharePayload({
+      mmsi: id.mmsi,
+      name: id.name,
+      share,
+      days
+    })
+    directory.postShare(global.fetch, directory.POST_URL, body).then(() => {
+      shareState.failCount = 0
+      if ( share ) {
+        shareState.renewAtMs = directory.nextRenewAtMs(Date.now(), days)
+      }
+    }).catch(err => {
+      shareState.failCount += 1
+      shareState.renewAtMs = Date.now() + directory.backoffMs(shareState.failCount)
+      app.debug('directory share failed: %s', err.message)
+    })
   }
   
   plugin.id = "signalk-buddylist-plugin"
@@ -393,6 +448,18 @@ module.exports = function(app) {
         title: 'Resend when distance changes (m)',
         description: 'Only used when Resend Alerts is on. 0 = every position; otherwise resend after this many metres.',
         default: 0
+      },
+      skShare: {
+        type: 'boolean',
+        title: 'Share as Signal K buddy',
+        description: 'Opt in: POST this vessel MMSI and name to the directory so other opted-in boats can match you on AIS. No extra GPS.',
+        default: false
+      },
+      skShareDays: {
+        type: 'number',
+        title: 'Share for (days)',
+        description: 'Lease length. Renewed at half this time when the directory is reachable. Default 90.',
+        default: 90
       }
     }
   }

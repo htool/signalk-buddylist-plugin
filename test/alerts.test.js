@@ -112,6 +112,8 @@ test('schema order: alert options then resend options', () => {
     'alertDistance',
     'alertBearing',
     'resendAlerts',
-    'resendAlertDistance'
+    'resendAlertDistance',
+    'skShare',
+    'skShareDays'
   ])
 })

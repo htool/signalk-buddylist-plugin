@@ -22,5 +22,5 @@ Read these, then `index.js`. Do not load `signalk-server` source unless a client
 - `geolib.getDistance` returns metres. Convert configured range in one place only.
 - Put shared alert/resend logic in `lib/alerts.js` and cover it in `test/`. **Every new feature slice includes tests in its done-when.** Run `npm test` before the code commit.
 - Slice 5 (unit tests for existing alert/resend behaviour) is implemented.
-- Slice 6 (SK buddies docs) is implemented. Next: slice 7 (directory client).
+- Slice 6 (SK buddies docs) is implemented. Next: slice 8 (AIS match and SK-group alerts).
 - If a needed fact looks like a shared server probe, ask the human; meanwhile workaround and note it in known-gaps. Do not open a signalk-server issue unless asked.

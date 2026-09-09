@@ -7,7 +7,7 @@ Maintain a configured list of other vessels (buddies). When a buddy's `navigatio
 ## Data flow
 
 ```
-plugin config (urn, optional name, alert, alertDistance, alertBearing, resendAlerts, resendAlertDistance)
+plugin config (urn, optional name, alert…, skShare, skShareDays)
         │
         ▼
 subscribe vessels.<urn>.navigation.position  (policy: instant)
@@ -35,6 +35,8 @@ HTTP mutations (add / rename / delete) call `app.savePluginOptions`, then tear d
 | config `alertBearing` | if true, alert may include relative ° (`headingTrue` else magnetic) |
 | config `resendAlerts` | if true, send again while in range |
 | config `resendAlertDistance` | metres; ignored unless resend is on. 0 = every position; else `|Δdistance| ≥ X` |
+| config `skShare` | opt-in POST of self MMSI + name to vhfinfo directory |
+| config `skShareDays` | lease days, default 90; renew at half lease when directory HTTP succeeds |
 
 ## HTTP
 
