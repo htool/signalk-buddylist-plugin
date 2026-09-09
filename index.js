@@ -129,7 +129,7 @@ module.exports = function(app) {
 
     app.put(apiBase + '/:urn', (req, res) => {
       const urn = req.params.urn
-      const buddy = props.buddiesfind(b => b.urn == urn)
+      const buddy = props.buddies.find(b => b.urn == urn)
 
       if ( !buddy ) {
         res.status(400).send('cannot find buddy with urn: ' + urn)
@@ -245,8 +245,10 @@ module.exports = function(app) {
       if ( myPos && myPos.latitude && myPos.longitude ) {
         const distance = geolib.getDistance(myPos, position)
         app.debug('%s is %dm away', context, distance)
-        if ( distance < alertDistance*1000 ) {
-          const sentName = name || kname || context
+        const nameMissing = typeof name !== 'string' || name.trim() === ''
+        const sentName = name || kname || context
+        const nameNote = nameMissing ? ' (name missing)' : ''
+        if ( distance < alertDistance * 1852 ) {
           const sent = notifications[context]
           const path = `notifications.buddy.${context}`
           const existing = app.getSelfPath(path)
@@ -267,7 +269,7 @@ module.exports = function(app) {
                   value: {
                     state: 'alert',
                     method,
-                    message: `Your buddy ${sentName} is near`
+                    message: `Your buddy ${sentName}${nameNote} is near (${distance}m)`
                   }
                 }]
               }]
@@ -283,7 +285,7 @@ module.exports = function(app) {
                 value: {
                   state: 'normal',
                   method: [],
-                  message: `Your buddy ${name || kname || context} is away`
+                  message: `Your buddy ${sentName}${nameNote} is away`
               }
               }]
             }]
@@ -323,7 +325,8 @@ module.exports = function(app) {
             urn: {
               type: 'string',
               title: 'URN',
-              description: 'The Signal K urn of the buddy (ex: urn:mrn:imo:mmsi:123456)'
+              description: 'The Signal K urn of the buddy (ex: urn:mrn:imo:mmsi:123456)',
+              default: 'urn:mrn:imo:mmsi:'
             },
             name: {
               type: 'string',
@@ -348,7 +351,7 @@ module.exports = function(app) {
       alertDistance: {
         type: 'number',
         title: 'Alert Distance',
-        description: 'Sent the notification when a buddy is this near (km)',
+        description: 'Sent the notification when a buddy is this near (NM)',
         default: 1
       }
     }

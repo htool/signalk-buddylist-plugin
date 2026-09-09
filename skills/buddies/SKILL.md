@@ -1,0 +1,28 @@
+---
+name: buddies
+description: >-
+  Change Signal K buddy-list alerts and HTTP APIs in this plugin.
+  Use when editing signalk-buddylist-plugin, notifications.buddy,
+  alertDistance, buddy.name, or /signalk/v1|v2/api/resources/buddies.
+---
+
+# Buddy list
+
+Read [AGENTS.md](../../AGENTS.md) first. Next slice is [docs/features.md](../../docs/features.md).
+
+## Do
+
+- Convert `alertDistance` to metres in **one** place. After slice 2 that factor is **1852** (NM). Do not mix km and NM.
+- `geolib.getDistance` is already metres. Put metres in the alert as `(${distance}m)`.
+- Display name: `buddy.name || AIS name || urn`. If `buddy.name` is missing, append ` (name missing)` to the message. Still subscribe and still alert.
+- Keep v1 and v2 routes. Fix v1 with `.find`, do not copy v2 JSON onto v1.
+- Recode onto current `index.js`. Do not cherry-pick `fork-work-2021` (`checkBuddy` gained `resendAlerts`).
+- Slice 2 is already on this branch. Do not add heading, tests, or APIs in the same PR.
+
+## Do not
+
+- Skip buddies that have no configured name.
+- Add heading to the notification.
+- Bump the npm version.
+- Emit NMEA or touch signalk-server internals.
+- Expand this PR past features.md slice 2.
