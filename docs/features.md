@@ -1,6 +1,6 @@
 # Features
 
-Implement in order. One slice per commit unless a slice says otherwise. Stop when the slice's done-when is met.
+Implement in order. One slice per commit unless a slice says otherwise. Stop when the slice's done-when is met. **New feature slices include tests** (`npm test`); put logic in `lib/alerts.js` when it can be tested without a live server.
 
 ## 1. Agent docs kit
 
@@ -43,9 +43,14 @@ Implement in order. One slice per commit unless a slice says otherwise. Stop whe
   - distance resend runs **only if** `resendAlerts` is on
   - with resend on: X = 0 every position; X > 0 only when `|Δdistance| ≥ X`
   - schema order: alert, alertDistance, alertBearing, then resendAlerts, resendAlertDistance
-- **Out of scope:** version bump, tests.
+- **Out of scope:** version bump.
+
+## 5. Unit tests for alert and resend
+
+- **Status:** done
+- **Done when:** `npm test` covers NM threshold, name-missing text, bearing formatting, first alert, no resend when resend is off, +10 m vs +160 m with resend 100 m, X=0 every position, schema order.
+- **Out of scope:** live Signal K / AIS inject.
 
 ## Later (not this PR)
 
-- Tests for distance threshold and notification text
 - Align v1 error shapes with v2

@@ -14,6 +14,7 @@
  */
 
 const geolib = require('geolib')
+const alerts = require('./lib/alerts')
 
 const apiBase = '/signalk/v1/api/resources/buddies'
 const v2ApiBase = '/signalk/v2/api/resources/buddies'
@@ -225,13 +226,10 @@ module.exports = function(app) {
   }
   
   function headingDegrees () {
-    const trueH = app.getSelfPath('navigation.headingTrue.value')
-    const magH = app.getSelfPath('navigation.headingMagnetic.value')
-    const rad = Number.isFinite(trueH) ? trueH : magH
-    if ( !Number.isFinite(rad) ) {
-      return null
-    }
-    return rad * 180 / Math.PI
+    return alerts.headingDegrees(
+      app.getSelfPath('navigation.headingTrue.value'),
+      app.getSelfPath('navigation.headingMagnetic.value')
+    )
   }
 
   function relativeBearingDeg (myPos, position) {
@@ -239,12 +237,7 @@ module.exports = function(app) {
     if ( headingDeg === null ) {
       return null
     }
-    const bearing = geolib.getGreatCircleBearing(myPos, position)
-    let rel = (bearing - headingDeg) % 360
-    if ( rel < 0 ) {
-      rel += 360
-    }
-    return Math.round(rel) % 360
+    return alerts.relativeBearingDeg(headingDeg, geolib.getGreatCircleBearing(myPos, position))
   }
 
   function checkBuddy(context, name, alertEnabled, alertDistance, resendAlerts, alertBearing, resendAlertDistance, position) {
@@ -268,17 +261,16 @@ module.exports = function(app) {
       if ( myPos && myPos.latitude && myPos.longitude ) {
         const distance = geolib.getDistance(myPos, position)
         app.debug('%s is %dm away', context, distance)
-        const nameMissing = typeof name !== 'string' || name.trim() === ''
-        const sentName = name || kname || context
-        const nameNote = nameMissing ? ' (name missing)' : ''
-        let nearDetail = `(${distance}m)`
+        const sentName = alerts.displayName(name, kname, context)
+        const nameNote = alerts.nameNote(name)
+        let nearDetail = alerts.nearDetail(distance, null)
         if ( alertBearing ) {
           const rel = relativeBearingDeg(myPos, position)
           if ( rel !== null ) {
-            nearDetail = `(${distance}m, ${rel}°)`
+            nearDetail = alerts.nearDetail(distance, rel)
           }
         }
-        if ( distance < alertDistance * 1852 ) {
+        if ( distance < alerts.rangeThresholdM(alertDistance) ) {
           const sent = notifications[context]
           const path = `notifications.buddy.${context}`
           const existing = app.getSelfPath(path)
@@ -289,12 +281,13 @@ module.exports = function(app) {
           }
           
           app.debug('sent: %j', sent)
-          const lastName = sent && (typeof sent === 'string' ? sent : sent.name)
-          const lastDist = sent && typeof sent === 'object' ? sent.distance : undefined
-          const delta = Number(resendAlertDistance) || 0
-          const moved = Number.isFinite(lastDist) && Math.abs(distance - lastDist) >= delta
-          const resend = resendAlerts && (delta > 0 ? moved : true)
-          if ( !sent || lastName != sentName || resend ) {
+          if ( alerts.shouldSendAlert({
+            sent,
+            sentName,
+            distance,
+            resendAlerts,
+            resendAlertDistance
+          }) ) {
             app.debug('send notification for %s', context)
             notifications[context] = { name: sentName, distance }
             app.handleMessage(plugin.id, {
@@ -304,7 +297,7 @@ module.exports = function(app) {
                   value: {
                     state: 'alert',
                     method,
-                    message: `Your buddy ${sentName}${nameNote} is near ${nearDetail}`
+                    message: alerts.nearMessage(sentName, name, nearDetail)
                   }
                 }]
               }]
