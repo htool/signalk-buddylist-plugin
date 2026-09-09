@@ -61,6 +61,9 @@ test('schema includes skShare and skShareDays', () => {
   assert.equal(plugin.schema.properties.skShare.default, false)
   assert.equal(plugin.schema.properties.skShareDays.default, 90)
   assert.equal(plugin.schema.properties.skAlert.default, true)
+  assert.equal(plugin.schema.properties.personalHeading.title, 'Personal buddies')
+  assert.equal(plugin.schema.properties.signalkHeading.title, 'Signal K buddies')
+  assert.equal(plugin.schema.properties.skShare.title, 'Share this vessel')
 })
 
 test('parseRoster drops expired and bad MMSI', () => {

@@ -107,12 +107,14 @@ test('schema order: alert options then resend options', () => {
     savePluginOptions: () => {}
   })
   assert.deepEqual(Object.keys(plugin.schema.properties), [
+    'personalHeading',
     'buddies',
     'alert',
     'alertDistance',
     'alertBearing',
     'resendAlerts',
     'resendAlertDistance',
+    'signalkHeading',
     'skShare',
     'skShareDays',
     'skAlert',
@@ -121,4 +123,6 @@ test('schema order: alert options then resend options', () => {
     'skResendAlerts',
     'skResendAlertDistance'
   ])
+  assert.equal(plugin.schema.properties.personalHeading.title, 'Personal buddies')
+  assert.equal(plugin.schema.properties.signalkHeading.title, 'Signal K buddies')
 })

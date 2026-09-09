@@ -471,6 +471,12 @@ module.exports = function(app) {
   plugin.schema = {
     type: "object",
     properties: {
+      personalHeading: {
+        type: 'object',
+        title: 'Personal buddies',
+        description: 'Manual URN list. Alert options in this section apply only to that list.',
+        properties: {}
+      },
       buddies: {
         type: "array",
         title: "Buddies",
@@ -522,10 +528,16 @@ module.exports = function(app) {
         description: 'Only used when Resend Alerts is on. 0 = every position; otherwise resend after this many metres.',
         default: 0
       },
+      signalkHeading: {
+        type: 'object',
+        title: 'Signal K buddies',
+        description: 'Opt-in directory. Other opted-in boats match you on AIS. No extra GPS. Alert options in this section are separate from the list above.',
+        properties: {}
+      },
       skShare: {
         type: 'boolean',
-        title: 'Share as Signal K buddy',
-        description: 'Opt in: POST this vessel MMSI and name to the directory so other opted-in boats can match you on AIS. No extra GPS.',
+        title: 'Share this vessel',
+        description: 'POST this vessel MMSI and name to the directory.',
         default: false
       },
       skShareDays: {
@@ -536,32 +548,32 @@ module.exports = function(app) {
       },
       skAlert: {
         type: 'boolean',
-        title: 'Signal K buddy alert',
+        title: 'Alert',
         description: 'Send a notification when an opted-in Signal K buddy is near (AIS match)',
         default: true
       },
       skAlertDistance: {
         type: 'number',
-        title: 'Signal K buddy alert distance',
-        description: 'NM. Same unit as personal Alert Distance',
+        title: 'Alert Distance',
+        description: 'Send the notification when a Signal K buddy is this near (NM)',
         default: 1
       },
       skAlertBearing: {
         type: 'boolean',
-        title: 'Signal K buddy show bearing',
-        description: 'Include relative bearing in the Signal K buddy notification',
+        title: 'Show bearing',
+        description: 'Include relative bearing in the Signal K buddy notification (0° ahead)',
         default: false
       },
       skResendAlerts: {
         type: 'boolean',
-        title: 'Signal K buddy resend alerts',
-        description: 'Send again while a Signal K buddy stays near',
+        title: 'Resend Alerts',
+        description: 'Send again while a Signal K buddy stays near. If Resend when distance changes is 0, every position; otherwise only after that many metres.',
         default: false
       },
       skResendAlertDistance: {
         type: 'number',
-        title: 'Signal K buddy resend when distance changes (m)',
-        description: 'Only used when Signal K buddy resend is on. 0 = every position; otherwise after that many metres.',
+        title: 'Resend when distance changes (m)',
+        description: 'Only used when Resend Alerts is on. 0 = every position; otherwise resend after this many metres.',
         default: 0
       }
     }
