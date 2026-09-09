@@ -291,9 +291,10 @@ module.exports = function(app) {
           app.debug('sent: %j', sent)
           const lastName = sent && (typeof sent === 'string' ? sent : sent.name)
           const lastDist = sent && typeof sent === 'object' ? sent.distance : undefined
-          const delta = Number(resendAlertDistance)
-          const moved = delta > 0 && Number.isFinite(lastDist) && Math.abs(distance - lastDist) >= delta
-          if ( !sent || resendAlerts || lastName != sentName || moved ) {
+          const delta = Number(resendAlertDistance) || 0
+          const moved = Number.isFinite(lastDist) && Math.abs(distance - lastDist) >= delta
+          const resend = resendAlerts && (delta > 0 ? moved : true)
+          if ( !sent || lastName != sentName || resend ) {
             app.debug('send notification for %s', context)
             notifications[context] = { name: sentName, distance }
             app.handleMessage(plugin.id, {
@@ -376,11 +377,11 @@ module.exports = function(app) {
         description: 'Send a notification when a buddy is near',
         default: true
       },
-      resendAlerts: {
-        type: 'boolean',
-        title: 'Resend Alerts',
-        description: 'Continually send notifications when a buddy is near',
-        default: false
+      alertDistance: {
+        type: 'number',
+        title: 'Alert Distance',
+        description: 'Send the notification when a buddy is this near (NM)',
+        default: 1
       },
       alertBearing: {
         type: 'boolean',
@@ -388,17 +389,17 @@ module.exports = function(app) {
         description: 'Include buddy bearing relative to heading in the notification (0° ahead)',
         default: false
       },
+      resendAlerts: {
+        type: 'boolean',
+        title: 'Resend Alerts',
+        description: 'Send again while a buddy stays near. If Resend when distance changes is 0, every position; otherwise only after that many metres.',
+        default: false
+      },
       resendAlertDistance: {
         type: 'number',
         title: 'Resend when distance changes (m)',
-        description: 'Resend the alert when the buddy moves this many metres (0 = off). Independent of Resend Alerts.',
+        description: 'Only used when Resend Alerts is on. 0 = every position; otherwise resend after this many metres.',
         default: 0
-      },
-      alertDistance: {
-        type: 'number',
-        title: 'Alert Distance',
-        description: 'Sent the notification when a buddy is this near (NM)',
-        default: 1
       }
     }
   }
