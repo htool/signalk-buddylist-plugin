@@ -19,10 +19,12 @@ test('relative bearing: 0 is ahead, no leading zeros, wraps', () => {
   assert.equal(alerts.relativeBearingDeg(null, 90), null)
 })
 
-test('near message omits bearing when heading is missing', () => {
-  assert.equal(alerts.nearMessage('WAVE', null), 'Your buddy WAVE is near')
-  assert.equal(alerts.nearMessage('WAVE', 47), 'Your buddy WAVE is near (47°)')
-  assert.equal(alerts.nearMessage('WAVE', 7), 'Your buddy WAVE is near (7°)')
+test('near message includes metres; bearing sits in the same parens', () => {
+  assert.equal(alerts.nearDetail(400.2, null), '(400m)')
+  assert.equal(alerts.nearDetail(412, 47), '(412m, 47°)')
+  assert.equal(alerts.nearDetail(400, 7), '(400m, 7°)')
+  assert.equal(alerts.nearMessage('WAVE', 412, null), 'Your buddy WAVE is near (412m)')
+  assert.equal(alerts.nearMessage('WAVE', 412, 47), 'Your buddy WAVE is near (412m, 47°)')
 })
 
 test('schema includes alertBearing default false', () => {

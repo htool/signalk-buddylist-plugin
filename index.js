@@ -287,7 +287,7 @@ module.exports = function(app) {
                   value: {
                     state: 'alert',
                     method,
-                    message: alerts.nearMessage(sentName, relativeDeg)
+                    message: alerts.nearMessage(sentName, distance, relativeDeg)
                   }
                 }]
               }]
